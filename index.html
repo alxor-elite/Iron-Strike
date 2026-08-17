@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="IRON STRIKE - an original low-poly browser FPS." />
+  <title>IRON STRIKE</title>
+  <!-- styles are imported by src/main.js so Vite bundles them for production -->
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- ============================ HUD ============================ -->
+    <div id="hud" class="screen-layer hidden" aria-hidden="true">
+      <div id="damage-vignette"></div>
+      <div id="hitdir-wrap">
+        <div class="hitdir" data-dir="up"></div>
+        <div class="hitdir" data-dir="down"></div>
+        <div class="hitdir" data-dir="left"></div>
+        <div class="hitdir" data-dir="right"></div>
+      </div>
+
+      <!-- top left: health -->
+      <div class="hud-corner hud-tl">
+        <div class="hud-label">OPERATOR</div>
+        <div class="health-block">
+          <div class="health-bar"><div id="health-fill" class="health-fill"></div></div>
+          <div id="health-value" class="health-value">100</div>
+        </div>
+        <div id="state-tags" class="state-tags">
+          <span id="tag-sprint" class="tag">SPRINT</span>
+          <span id="tag-crouch" class="tag">CROUCH</span>
+          <span id="tag-ads" class="tag">ADS</span>
+        </div>
+      </div>
+
+      <!-- top center: timer + team score -->
+      <div class="hud-corner hud-tc">
+        <div id="match-timer" class="match-timer">5:00</div>
+        <div class="score-strip">
+          <div class="team team-a">
+            <span class="team-name">RAVEN</span>
+            <span id="score-a" class="team-score">0</span>
+          </div>
+          <div class="score-sep">/ 30</div>
+          <div class="team team-b">
+            <span id="score-b" class="team-score">0</span>
+            <span class="team-name">VULTURE</span>
+          </div>
+        </div>
+        <div class="score-progress">
+          <div id="score-prog-a" class="prog prog-a"></div>
+          <div id="score-prog-b" class="prog prog-b"></div>
+        </div>
+      </div>
+
+      <!-- top right: killfeed -->
+      <div class="hud-corner hud-tr">
+        <div id="killfeed" class="killfeed"></div>
+      </div>
+
+      <!-- bottom right: weapon -->
+      <div class="hud-corner hud-br">
+        <div id="weapon-name" class="weapon-name">KV-9 &ldquo;WIDOWMAKER&rdquo;</div>
+        <div class="ammo-block">
+          <span id="ammo-mag" class="ammo-mag">30</span>
+          <span class="ammo-sep">/</span>
+          <span id="ammo-reserve" class="ammo-reserve">120</span>
+        </div>
+        <div id="reload-prompt" class="reload-prompt">PRESS <b>R</b> TO RELOAD</div>
+        <div id="reload-track" class="reload-track"><div id="reload-fill"></div></div>
+      </div>
+
+      <!-- bottom left: objective hint -->
+      <div class="hud-corner hud-bl">
+        <div class="hud-label">TEAM DEATHMATCH</div>
+        <div class="hud-sub">Eliminate 30 hostiles &middot; <span class="key">TAB</span> scoreboard</div>
+      </div>
+
+      <!-- crosshair -->
+      <div id="crosshair" class="crosshair">
+        <span class="ch ch-t"></span>
+        <span class="ch ch-b"></span>
+        <span class="ch ch-l"></span>
+        <span class="ch ch-r"></span>
+        <span class="ch-dot"></span>
+      </div>
+      <div id="hitmarker" class="hitmarker">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div id="headshot-banner" class="headshot-banner">HEADSHOT</div>
+      <div id="killpop" class="killpop"></div>
+
+      <!-- scoreboard (TAB) -->
+      <div id="scoreboard" class="scoreboard hidden"></div>
+    </div>
+
+    <!-- ============================ MAIN MENU ============================ -->
+    <div id="main-menu" class="screen-layer menu-layer">
+      <div class="menu-bg"></div>
+      <div class="menu-scanlines"></div>
+      <div class="menu-content">
+        <header class="brand">
+          <div class="brand-mark">
+            <span class="brand-chev">&#9670;</span>
+            <span class="brand-tag">TACTICAL OPS DIVISION</span>
+          </div>
+          <h1 class="brand-title">IRON<span>STRIKE</span></h1>
+          <div class="brand-sub">FOUNDRY-7 &middot; TEAM DEATHMATCH &middot; SOLO VS AI</div>
+        </header>
+
+        <nav class="menu-nav">
+          <button class="btn btn-primary" data-action="play">
+            <span class="btn-key">01</span><span class="btn-text">PLAY</span><span class="btn-arrow">&rsaquo;</span>
+          </button>
+          <button class="btn" data-action="controls">
+            <span class="btn-key">02</span><span class="btn-text">CONTROLS</span><span class="btn-arrow">&rsaquo;</span>
+          </button>
+          <button class="btn" data-action="settings">
+            <span class="btn-key">03</span><span class="btn-text">SETTINGS</span><span class="btn-arrow">&rsaquo;</span>
+          </button>
+        </nav>
+
+        <footer class="menu-foot">
+          <span>ORIGINAL BUILD &middot; NO THIRD-PARTY GAME ASSETS</span>
+          <span id="build-tag">v1.0.0</span>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ============================ LOADING ============================ -->
+    <div id="loading" class="screen-layer hidden">
+      <div class="loading-inner">
+        <div class="loading-title">DEPLOYING TO <b>FOUNDRY-7</b></div>
+        <div class="loading-track"><div id="loading-fill"></div></div>
+        <div id="loading-status" class="loading-status">Initialising renderer&hellip;</div>
+        <div class="loading-tips">
+          <span class="tip-label">FIELD NOTE</span>
+          <span id="loading-tip">Aim down sights (right mouse) to tighten your spread.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ CLICK TO ENGAGE ============================ -->
+    <div id="resume-prompt" class="screen-layer hidden">
+      <div class="resume-inner">
+        <div class="resume-title">CLICK TO ENGAGE</div>
+        <div class="resume-sub">Mouse will be locked &middot; ESC to pause</div>
+      </div>
+    </div>
+
+    <!-- ============================ PAUSE ============================ -->
+    <div id="pause-menu" class="screen-layer menu-layer hidden">
+      <div class="menu-bg dim"></div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>MISSION PAUSED</h2>
+          <div class="panel-sub">FOUNDRY-7 &middot; TEAM DEATHMATCH</div>
+        </div>
+        <div class="panel-body">
+          <button class="btn btn-primary" data-action="resume"><span class="btn-text">RESUME</span></button>
+          <button class="btn" data-action="settings"><span class="btn-text">SETTINGS</span></button>
+          <button class="btn" data-action="controls"><span class="btn-text">CONTROLS</span></button>
+          <button class="btn" data-action="restart"><span class="btn-text">RESTART MATCH</span></button>
+          <button class="btn btn-danger" data-action="menu"><span class="btn-text">MAIN MENU</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ SETTINGS ============================ -->
+    <div id="settings-menu" class="screen-layer menu-layer hidden">
+      <div class="menu-bg dim"></div>
+      <div class="panel panel-wide">
+        <div class="panel-head">
+          <h2>SETTINGS</h2>
+          <div class="panel-sub">Saved automatically to this browser</div>
+        </div>
+        <div class="panel-body settings-body">
+
+          <div class="setting">
+            <label for="set-sens">MOUSE SENSITIVITY <output id="out-sens">1.00</output></label>
+            <input id="set-sens" type="range" min="0.2" max="3" step="0.05" value="1" />
+          </div>
+
+          <div class="setting">
+            <label for="set-fov">FIELD OF VIEW <output id="out-fov">80</output></label>
+            <input id="set-fov" type="range" min="60" max="110" step="1" value="80" />
+          </div>
+
+          <div class="setting">
+            <label>GRAPHICS QUALITY</label>
+            <div class="seg" id="set-quality">
+              <button data-value="low">LOW</button>
+              <button data-value="medium">MEDIUM</button>
+              <button data-value="high">HIGH</button>
+            </div>
+          </div>
+
+          <div class="setting">
+            <label for="set-volume">MASTER VOLUME <output id="out-volume">70</output></label>
+            <input id="set-volume" type="range" min="0" max="100" step="1" value="70" />
+          </div>
+
+          <div class="setting">
+            <label for="set-invert">OPTIONS</label>
+            <div class="check-row">
+              <label class="check"><input id="set-invert" type="checkbox" /><span>Invert vertical look</span></label>
+              <label class="check"><input id="set-shake" type="checkbox" checked /><span>Camera shake</span></label>
+              <label class="check"><input id="set-adstoggle" type="checkbox" /><span>Toggle aim (instead of hold)</span></label>
+            </div>
+          </div>
+
+          <div class="setting setting-full">
+            <div class="fps-readout">Live FPS: <b id="fps-readout">--</b></div>
+          </div>
+        </div>
+        <div class="panel-foot">
+          <button class="btn" data-action="reset"><span class="btn-text">RESET DEFAULTS</span></button>
+          <button class="btn btn-primary" data-action="back"><span class="btn-text">BACK</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ CONTROLS ============================ -->
+    <div id="controls-menu" class="screen-layer menu-layer hidden">
+      <div class="menu-bg dim"></div>
+      <div class="panel panel-wide">
+        <div class="panel-head">
+          <h2>CONTROLS</h2>
+          <div class="panel-sub">Desktop keyboard &amp; mouse</div>
+        </div>
+        <div class="panel-body controls-body">
+          <div class="ctrl-col">
+            <div class="ctrl"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span><em>Move</em></div>
+            <div class="ctrl"><span class="key wide">SHIFT</span><em>Sprint</em></div>
+            <div class="ctrl"><span class="key wide">SPACE</span><em>Jump</em></div>
+            <div class="ctrl"><span class="key wide">CTRL</span><em>Crouch</em></div>
+            <div class="ctrl"><span class="key wide">TAB</span><em>Scoreboard</em></div>
+          </div>
+          <div class="ctrl-col">
+            <div class="ctrl"><span class="key">LMB</span><em>Fire</em></div>
+            <div class="ctrl"><span class="key">RMB</span><em>Aim down sights</em></div>
+            <div class="ctrl"><span class="key">R</span><em>Reload</em></div>
+            <div class="ctrl"><span class="key wide">ESC</span><em>Pause / release mouse</em></div>
+            <div class="ctrl"><span class="key">F</span><em>Toggle flashlight</em></div>
+          </div>
+        </div>
+        <div class="panel-foot">
+          <button class="btn btn-primary" data-action="back"><span class="btn-text">BACK</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ DEATH ============================ -->
+    <div id="death-screen" class="screen-layer hidden">
+      <div class="death-bg"></div>
+      <div class="death-inner">
+        <div class="death-title">YOU WERE ELIMINATED</div>
+        <div id="death-by" class="death-by">Killed by VULTURE 03</div>
+        <div class="death-timer">RESPAWNING IN <b id="respawn-count">3</b></div>
+      </div>
+    </div>
+
+    <!-- ============================ RESULTS ============================ -->
+    <div id="results-screen" class="screen-layer menu-layer hidden">
+      <div class="menu-bg dim"></div>
+      <div class="panel panel-wide">
+        <div class="panel-head">
+          <h2 id="results-title">VICTORY</h2>
+          <div id="results-sub" class="panel-sub">Score limit reached</div>
+        </div>
+        <div class="panel-body results-body">
+          <div class="result-scores">
+            <div class="rteam ra">
+              <div class="rteam-name">RAVEN (YOU)</div>
+              <div id="result-a" class="rteam-score">0</div>
+            </div>
+            <div class="rteam-vs">VS</div>
+            <div class="rteam rb">
+              <div class="rteam-name">VULTURE (AI)</div>
+              <div id="result-b" class="rteam-score">0</div>
+            </div>
+          </div>
+          <div class="result-stats" id="result-stats"></div>
+        </div>
+        <div class="panel-foot">
+          <button class="btn btn-primary" data-action="again"><span class="btn-text">PLAY AGAIN</span></button>
+          <button class="btn" data-action="menu"><span class="btn-text">MAIN MENU</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ FATAL ERROR ============================ -->
+    <div id="fatal" class="screen-layer hidden">
+      <div class="fatal-inner">
+        <h2>SOMETHING BROKE</h2>
+        <pre id="fatal-msg"></pre>
+        <button class="btn btn-primary" onclick="location.reload()"><span class="btn-text">RELOAD</span></button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
