@@ -55,7 +55,7 @@ export class MeleeWeapon extends Weapon {
     this._swingHit = false;
     this._kick = 0.05;
     this._kickRot = 0.14;
-    this.game.audio.play('whizz', { volume: 0.5, rate: 1.3 });
+    this.game.audio.play(this.sounds.fire, { volume: 0.55, rate: 0.95 + Math.random() * 0.12 });
   }
 
   update(dt, input) {
@@ -123,7 +123,8 @@ export class MeleeWeapon extends Weapon {
       const killed = enemy.takeDamage(dmg, zone, point, game.player);
       game.effects.spawnFleshHit(point, null, zone === 'head');
       game.hud.showHitMarker(zone === 'head', killed);
-      game.audio.play(zone === 'head' ? 'hitmarkerHead' : 'hitmarker', { volume: 0.6 });
+      game.audio.play(this.sounds.hit || 'hitmarker', { volume: 0.7, position: point });
+      game.audio.play(zone === 'head' ? 'hitmarkerHead' : 'hitmarker', { volume: 0.5 });
       hitSomething = true;
     }
 

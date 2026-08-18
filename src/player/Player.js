@@ -208,13 +208,18 @@ export class Player {
     if (this.grounded && this.horizontalSpeed > 0.6) {
       this._bobPhase += dt * (7.4 + speedRatio * 5.6);
       this._stepDistance += this.horizontalSpeed * dt;
-      const stride = this.sprinting ? 2.05 : this.crouching ? 1.5 : 2.35;
+      // a longer stride means fewer footfalls per second, which matters as much
+      // as their level for how quickly they start to grate
+      const stride = this.sprinting ? 2.3 : this.crouching ? 1.7 : 2.6;
       if (this._stepDistance >= stride) {
         this._stepDistance = 0;
-        this.game.audio.play('footstep', {
+        // Sprinting gets its own heavier cue rather than the walk turned up.
+        // Kept well down in the mix: it is the most frequently repeated sound
+        // in the game, so anything prominent here grates within a minute.
+        this.game.audio.play(this.sprinting ? 'footstepRun' : 'footstep', {
           position: this.position,
-          volume: this.crouching ? 0.28 : this.sprinting ? 0.75 : 0.5,
-          rate: 0.92 + Math.random() * 0.16
+          volume: this.crouching ? 0.14 : this.sprinting ? 0.34 : 0.24,
+          rate: 0.9 + Math.random() * 0.2
         });
       }
     } else {

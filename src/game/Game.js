@@ -20,6 +20,7 @@ import { loadLoadout, createWeapons } from '../weapons/Loadout.js';
 import { EnemyManager } from '../enemies/EnemyManager.js';
 import { HitEffects } from '../effects/HitEffect.js';
 import { AudioManager } from '../audio/AudioManager.js';
+import { registerSoundFiles } from '../audio/SoundFiles.js';
 import { setRaycastCamera } from '../utils/RaycastUtils.js';
 
 import { HUD } from '../ui/HUD.js';
@@ -254,6 +255,11 @@ export class Game {
     await frame();
 
     // loaded before the squad, because the enemies carry the same rifle
+    // samples, if any have been installed; missing ones stay procedural
+    registerSoundFiles(this.audio).then((n) => {
+      if (n) console.info(`[audio] ${n} cue${n === 1 ? '' : 's'} using installed samples`);
+    });
+
     loading.setProgress(0.84, 'Unpacking weapon models…');
     this.loadout = await loadLoadout();
     await frame();
@@ -361,7 +367,7 @@ export class Game {
     this.weapon.group.visible = true;
     this._swapTimer = immediate ? 0 : SWAP_TIME;
     this.hud.setWeaponName(this.weapon.name);
-    if (!immediate) this.audio.play('uiClick', { volume: 0.35 });
+    if (!immediate) this.audio.play('weaponSwap', { volume: 0.5 });
   }
 
   /** Slot keys, the quick-swap key and the scroll wheel. */

@@ -29,6 +29,16 @@ const _tmp = new THREE.Vector3();
  * screen. The ADS pose puts the optic lens exactly on the -Z axis, so the sight
  * picture agrees with where bullets actually go.
  */
+/** Cue names used when a weapon does not name its own. */
+export const DEFAULT_SOUNDS = {
+  fire: 'rifleFire',
+  dryFire: 'dryFire',
+  reloadStart: 'reloadStart',
+  magOut: 'magOut',
+  magIn: 'magIn',
+  bolt: 'boltRelease'
+};
+
 export const POSE = {
   hip: { pos: new THREE.Vector3(0.2, -0.185, -0.5), rot: new THREE.Euler(0.02, -0.1, 0.02) },
   ads: { pos: new THREE.Vector3(0.0, -0.0825, -0.62), rot: new THREE.Euler(0, 0, 0) },
@@ -64,6 +74,12 @@ export class Weapon {
     this.reloadTime = config.reloadTime;
     this.damage = config.damage;
     this.range = config.range;
+    /**
+     * Which audio cue each event plays. Naming them per weapon is what lets a
+     * rifle and a sidearm sound different — see SOUND_FILES in
+     * src/audio/SoundFiles.js for the files that override them.
+     */
+    this.sounds = { ...DEFAULT_SOUNDS, ...(config.sounds || {}) };
 
     this.adsAmount = 0;
     this.reloading = false;
@@ -134,7 +150,7 @@ export class Weapon {
     this._magDropped = false;
     this._magSeated = false;
     this._boltCycled = false;
-    this.game.audio.play('reloadStart', { volume: 0.8 });
+    this.game.audio.play(this.sounds.reloadStart, { volume: 0.8 });
     return true;
   }
 
@@ -197,7 +213,7 @@ export class Weapon {
       if (this.canFire) {
         this.fire();
       } else if (!this.melee && this.ammo <= 0 && !this.reloading && input.firePressed) {
-        this.game.audio.play('dryFire', { volume: 0.5 });
+        this.game.audio.play(this.sounds.dryFire, { volume: 0.5 });
         this.startReload();
       }
     }
@@ -303,7 +319,7 @@ export class Weapon {
     this.model.muzzleFlash.trigger();
     game.effects.muzzleLight(_muzzleWorld);
     game.effects.spawnCasing(_muzzleWorld, cam.camera.quaternion, this.model.ejectOffset);
-    game.audio.play('rifleFire', { volume: 0.85, rate: 0.97 + Math.random() * 0.06 });
+    game.audio.play(this.sounds.fire, { volume: 0.85, rate: 0.97 + Math.random() * 0.06 });
 
     // --- camera recoil ---
     const recoilScale = lerp(1, 0.62, this.adsAmount) * (player.crouching ? 0.8 : 1);
@@ -378,7 +394,7 @@ export class Weapon {
       mag.rotation.set(k * 0.5, 0, k * 0.25);
       if (!this._magDropped && k > 0.5) {
         this._magDropped = true;
-        this.game.audio.play('magOut', { volume: 0.6 });
+        this.game.audio.play(this.sounds.magOut, { volume: 0.6 });
       }
     } else if (t < 0.62) {
       // fresh magazine rises into place
@@ -397,7 +413,7 @@ export class Weapon {
       rot.set(0.1 - 0.04 * Math.sin(k * Math.PI), 0, 0);
       if (!this._magSeated) {
         this._magSeated = true;
-        this.game.audio.play('magIn', { volume: 0.75 });
+        this.game.audio.play(this.sounds.magIn, { volume: 0.75 });
         this._finishReload();
       }
     } else if (t < 0.9) {
@@ -409,7 +425,7 @@ export class Weapon {
       rot.set(0.1, -0.06 * pull, 0.05 * pull);
       if (!this._boltCycled && k > 0.45) {
         this._boltCycled = true;
-        this.game.audio.play('boltRelease', { volume: 0.7 });
+        this.game.audio.play(this.sounds.bolt, { volume: 0.7 });
       }
     } else {
       const k = (t - 0.9) / 0.1;

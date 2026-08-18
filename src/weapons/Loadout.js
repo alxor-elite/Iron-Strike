@@ -39,7 +39,17 @@ export const WEAPONS = [
     id: 'rifle',
     url: 'assets/models/ak47.glb',
     name: 'AK-47',
-    config: { ...RIFLE_CONFIG, name: 'AK-47' },
+    config: {
+      ...RIFLE_CONFIG,
+      name: 'AK-47',
+      sounds: {
+        fire: 'rifleFire',
+        reloadStart: 'rifleReloadStart',
+        magOut: 'rifleMagOut',
+        magIn: 'rifleMagIn',
+        bolt: 'rifleBolt'
+      }
+    },
     transform: {
       basis: null,
       // the curved magazine sits well forward of the pistol grip on an AK
@@ -74,6 +84,13 @@ export const WEAPONS = [
       recoilPitch: 0.011,
       recoilYaw: 0.0065,
       shake: 0.012,
+      sounds: {
+        fire: 'pistolFire',
+        reloadStart: 'pistolReloadStart',
+        magOut: 'pistolMagOut',
+        magIn: 'pistolMagIn',
+        bolt: 'pistolSlide'
+      },
       // a pistol is a quarter of the rifle's length: closer, higher, further in
       poseOffset: [-0.05, 0.045, 0.1]
     },
@@ -115,6 +132,7 @@ export const WEAPONS = [
       hitDelay: 0.13,        // the cut lands this far into the swing
       spreadHip: 0, spreadAds: 0, spreadMove: 0, spreadAir: 0, spreadBloom: 0,
       recoilPitch: 0, recoilYaw: 0, shake: 0,
+      sounds: { fire: 'knifeSwing', hit: 'knifeHit' },
       poseOffset: [-0.075, 0.045, 0.16],
       // angled across the view, otherwise a blade pointed at the horizon is
       // foreshortened into a sliver

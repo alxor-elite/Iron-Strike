@@ -192,11 +192,14 @@ npm run preview    # verify the production bundle locally
 
 | Asset | Used for | Credit | Licence |
 | --- | --- | --- | --- |
-| `ak47.glb` | the rifle | **Assault Rifle** by [Zsky](https://poly.pizza/u/Zsky) via [Poly Pizza](https://poly.pizza/) | CC BY |
-| `pistol.glb` | the sidearm | **Pistol** by [Zsky](https://poly.pizza/u/Zsky) via [Poly Pizza](https://poly.pizza/) | CC BY |
-| `knife.glb` | the melee weapon | **Knife** by [Quaternius](https://quaternius.com/) | Public domain (CC0) |
-| `arms.glb` | first-person arms | **Low Poly Arms** by [yalcinn1284](https://sketchfab.com/yalcinn1284) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
-| `guns_low_poly.glb` | unused (kept as a source of further weapons) | **Guns Low poly** by [Satendra Saraswat](https://sketchfab.com/satendra5286) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| `models/ak47.glb` | the rifle | **Assault Rifle** by [Zsky](https://poly.pizza/u/Zsky) via [Poly Pizza](https://poly.pizza/) | CC BY |
+| `models/pistol.glb` | the sidearm | **Pistol** by [Zsky](https://poly.pizza/u/Zsky) via [Poly Pizza](https://poly.pizza/) | CC BY |
+| `models/knife.glb` | the melee weapon | **Knife** by [Quaternius](https://quaternius.com/) | Public domain (CC0) |
+| `models/arms.glb` | first-person arms | **Low Poly Arms** by [yalcinn1284](https://sketchfab.com/yalcinn1284) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| `models/guns_low_poly.glb` | unused (kept as a source of further weapons) | **Guns Low poly** by [Satendra Saraswat](https://sketchfab.com/satendra5286) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| `audio/rifle_fire_*`, `pistol_fire_*`, `enemy_fire_*` | gunfire | **Vincent Sevedge**, via [Gunshot Sounds](https://opengameart.org/content/gunshot-sounds) on OpenGameArt | [CC BY 3.0](http://creativecommons.org/licenses/by/3.0/) |
+| `audio/footstep_*`, `footstep_run_*` | footsteps | [congusbongus](https://opengameart.org/content/footsteps-on-different-surfaces), derived from `footstep-concrete.wav` by [swuing](https://freesound.org/people/swuing/sounds/38873/) | [CC BY 3.0](http://creativecommons.org/licenses/by/3.0/) |
+| `audio/*_mag_out`, `*_mag_in`, `rifle_bolt` | reloads | [SpringySpringo](https://opengameart.org/content/gun-reload-sounds) | Public domain (CC0) |
 
 All model files live in `public/assets/models/`.
 
@@ -207,6 +210,16 @@ attribution; it is credited anyway.
 
 Poly Pizza states "CC-BY" without a version on its download dialog — check the
 model's own page for the exact version if that distinction matters to you.
+
+**On the gunfire licence:** the OpenGameArt page for *Gunshot Sounds* is tagged
+CC0 and credits the uploader as "Tabasco", but the `creativecommons.txt` inside
+the archive itself reads "Copyright (c) 2009 Vincent Sevedge … Creative Commons
+Attribution 3.0". The two disagree, so this project treats it as the stricter of
+the pair — CC BY 3.0, credited to Vincent Sevedge. Swap it out if you would
+rather not carry the attribution.
+
+All sounds were trimmed from longer recordings, mixed to mono, normalised and
+tapered; they are derivatives, which CC BY permits.
 
 ## Originality
 
