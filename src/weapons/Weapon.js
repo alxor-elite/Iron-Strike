@@ -42,6 +42,20 @@ export class Weapon {
     this.config = config;
 
     this.name = config.name;
+    /** Melee weapons have no ammo, no reload and no hitscan. */
+    this.melee = !!config.melee;
+    /**
+     * Nudge applied to every pose. The poses in POSE are framed around a
+     * metre-long rifle; a short weapon like a pistol or knife needs to sit
+     * closer and higher to read the same way on screen.
+     */
+    this.poseOffset = config.poseOffset
+      ? new THREE.Vector3().fromArray(config.poseOffset)
+      : new THREE.Vector3();
+    /** Same idea for orientation — a knife has to be angled across the view. */
+    this.poseRotOffset = config.poseRotOffset
+      ? new THREE.Euler().fromArray(config.poseRotOffset)
+      : new THREE.Euler();
     this.magSize = config.magSize;
     this.ammo = config.magSize;
     this.reserve = config.reserveMax;
@@ -100,12 +114,20 @@ export class Weapon {
     this._fireTimer = 0;
     this._burstCount = 0;
     this.adsAmount = 0;
-    this.model.magazine.position.copy(this.model.magHome);
-    this.model.magazine.rotation.set(0, 0, 0);
-    this.model.magazine.visible = true;
+    this._seatMagazine();
+  }
+
+  /** Put the magazine back where it belongs. No-op for weapons without one. */
+  _seatMagazine() {
+    const mag = this.model.magazine;
+    if (!mag) return;
+    mag.position.copy(this.model.magHome);
+    mag.rotation.set(0, 0, 0);
+    mag.visible = true;
   }
 
   startReload() {
+    if (this.melee) return false;
     if (this.reloading || this.ammo >= this.magSize || this.reserve <= 0) return false;
     this.reloading = true;
     this.reloadT = 0;
@@ -166,9 +188,7 @@ export class Weapon {
       this._animateReload(this.reloadT / this.reloadTime);
       if (this.reloadT >= this.reloadTime) {
         this.reloading = false;
-        this.model.magazine.position.copy(this.model.magHome);
-        this.model.magazine.rotation.set(0, 0, 0);
-        this.model.magazine.visible = true;
+        this._seatMagazine();
       }
     }
 
@@ -176,13 +196,13 @@ export class Weapon {
     if (player.alive && input.firing && !player.sprinting) {
       if (this.canFire) {
         this.fire();
-      } else if (this.ammo <= 0 && !this.reloading && input.firePressed) {
+      } else if (!this.melee && this.ammo <= 0 && !this.reloading && input.firePressed) {
         this.game.audio.play('dryFire', { volume: 0.5 });
         this.startReload();
       }
     }
     // auto-reload on empty
-    if (this.ammo <= 0 && !this.reloading && this.reserve > 0) this.startReload();
+    if (!this.melee && this.ammo <= 0 && !this.reloading && this.reserve > 0) this.startReload();
 
     // -------------------------------------------------------------- pose --
     let pose = POSE.hip;
@@ -191,14 +211,18 @@ export class Weapon {
     else if (this.adsAmount > 0.02) pose = null; // blended below
 
     if (pose) {
-      this._targetPos.copy(pose.pos);
-      this._targetRot.set(pose.rot.x, pose.rot.y, pose.rot.z);
-    } else {
-      this._targetPos.copy(POSE.hip.pos).lerp(POSE.ads.pos, this.adsAmount);
+      this._targetPos.copy(pose.pos).add(this.poseOffset);
       this._targetRot.set(
-        lerp(POSE.hip.rot.x, POSE.ads.rot.x, this.adsAmount),
-        lerp(POSE.hip.rot.y, POSE.ads.rot.y, this.adsAmount),
-        lerp(POSE.hip.rot.z, POSE.ads.rot.z, this.adsAmount)
+        pose.rot.x + this.poseRotOffset.x,
+        pose.rot.y + this.poseRotOffset.y,
+        pose.rot.z + this.poseRotOffset.z
+      );
+    } else {
+      this._targetPos.copy(POSE.hip.pos).add(this.poseOffset).lerp(POSE.ads.pos, this.adsAmount);
+      this._targetRot.set(
+        lerp(POSE.hip.rot.x + this.poseRotOffset.x, POSE.ads.rot.x, this.adsAmount),
+        lerp(POSE.hip.rot.y + this.poseRotOffset.y, POSE.ads.rot.y, this.adsAmount),
+        lerp(POSE.hip.rot.z + this.poseRotOffset.z, POSE.ads.rot.z, this.adsAmount)
       );
     }
 
@@ -238,10 +262,11 @@ export class Weapon {
     }
 
     // bolt / charging handle reciprocation
-    const boltPhase = this._boltT / 0.05;
-    this.model.bolt.position.z = this.model.boltHome + boltPhase * 0.055;
-
-    this.model.muzzleFlash.update(dt);
+    if (this.model.bolt) {
+      const boltPhase = this._boltT / 0.05;
+      this.model.bolt.position.z = this.model.boltHome + boltPhase * 0.055;
+    }
+    if (this.model.muzzleFlash) this.model.muzzleFlash.update(dt);
   }
 
   fire() {
@@ -334,6 +359,7 @@ export class Weapon {
   _animateReload(t) {
     const mag = this.model.magazine;
     const home = this.model.magHome;
+    if (!mag) return;
     const off = this._reloadOffset;
     const rot = this._reloadRot;
 

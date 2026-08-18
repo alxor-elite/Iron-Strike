@@ -7,7 +7,7 @@
  */
 
 import './styles/main.css';
-import { Game } from './game/Game.js';
+import { Game, GameState } from './game/Game.js';
 import { FatalScreen } from './ui/Screens.js';
 
 const canvas = document.getElementById('game-canvas');
@@ -36,8 +36,22 @@ if (!hasWebGL()) {
     const game = new Game(canvas);
     window.__ironStrike = game; // handy for debugging in the console
 
-    window.addEventListener('error', (e) => fail(e.error || e.message, 'Runtime error'));
-    window.addEventListener('unhandledrejection', (e) => fail(e.reason, 'Unhandled promise rejection'));
+    // Once the game is up, a stray error must not end the session: hand it to
+    // the game's error sink, which logs it, tells the player it recovered and
+    // only escalates to the fatal screen if the failure keeps repeating.
+    // (Before that point there is nothing to recover into, so it is fatal.)
+    const handle = (err, context) => {
+      if (game.state.current !== GameState.BOOT) game.reportError(err, context);
+      else fail(err, context);
+    };
+
+    window.addEventListener('error', (e) => {
+      // resource load failures (img/audio/script) also land here and carry an
+      // element as the target — they are not game errors
+      if (e.target && e.target !== window) return;
+      handle(e.error || e.message, 'Runtime error');
+    });
+    window.addEventListener('unhandledrejection', (e) => handle(e.reason, 'Unhandled promise rejection'));
 
     // Keep the page from scrolling / context-menuing during play.
     window.addEventListener('keydown', (e) => {

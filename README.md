@@ -1,9 +1,10 @@
 # IRON STRIKE
 
 A single-player, browser-native **3D first-person shooter** — Team Deathmatch
-against an AI squad on one compact industrial map. Built with **Three.js + Vite**,
-no game engine, and **zero binary assets**: every mesh, texture and sound is
-generated at runtime.
+against an AI squad on one compact industrial map. Built with **Three.js + Vite**
+and no game engine. Every texture and sound, the map, the characters and all
+effects are generated at runtime; the only binary assets are the imported
+weapon and arm models (see [Assets and licences](#assets-and-licences)).
 
 ```bash
 npm install
@@ -35,15 +36,41 @@ Click **PLAY**, then click once more to lock the mouse.
 | `SPACE` | Jump | `R` | Reload |
 | `CTRL` / `C` | Crouch | `TAB` | Scoreboard |
 | `ESC` | Pause / release mouse | `F` | Flashlight |
+| `1` `2` `3` | Rifle / sidearm / knife | `Q`, wheel | Cycle weapons |
 
-## Weapon — KV-9 "WIDOWMAKER"
+## Weapons
 
-Original low-poly assault rifle, ~600 RPM, 30-round magazine + 120 reserve,
-~2 s reload. Damage **100 head / 30 body / 20 limb**. Recoil springs, spread
-bloom, ADS zoom with an aligned red-dot, muzzle flash + world light, tracers,
-ejected brass, impact decals and hit markers (with a `HEADSHOT` banner).
+Three slots, switched with `1` `2` `3`, `Q` or the scroll wheel. Swapping takes
+0.42 s, during which the weapon rises into view and cannot fire.
 
-Eliminations resupply 25 rounds — 150 rounds would never cover a 30-kill match.
+| | Damage (head/body/limb) | Magazine | Notes |
+| --- | --- | --- | --- |
+| **AK-47** | 100 / 30 / 20 | 30 (+120) | ~600 RPM, 145 m |
+| **Sidearm** | 100 / 26 / 17 | 12 (+60) | ~420 RPM, 90 m, tighter ADS |
+| **Combat knife** | 100 / 55 / 40 | — | 2.4 m reach in a 99° arc |
+
+Every firearm has recoil springs, spread bloom, ADS zoom with an aligned
+red-dot, muzzle flash + world light, tracers, ejected brass, impact decals and
+hit markers (with a `HEADSHOT` banner). The knife swings on a timer: the cut
+lands 0.13 s in and sweeps an arc, so you need to be close but not precise. It
+is confirmed with a line-of-sight check, so it cannot reach through walls.
+
+Eliminations resupply 25 rounds to both firearms — 150 rounds would never cover
+a 30-kill match.
+
+The rifle and the first-person arms are imported meshes (see
+[Assets and licences](#assets-and-licences)), rigged at load time rather than in
+a modelling tool:
+
+- the gun is re-oriented into viewmodel space, normalised to length and anchored
+  so its sight line matches the ADS pose, then its magazine is carved out of the
+  welded mesh into its own part so the reload still drops one;
+- the arms come as one mirrored pair with no skeleton, so they are split down
+  their plane of symmetry into two independent arms and each is rotated to run
+  from its hand back off the bottom of the screen.
+
+The original procedural KV-9 "WIDOWMAKER" and its gloved hands are still in the
+build and are used automatically if the models are missing.
 
 ## FOUNDRY-7 (the map)
 
@@ -85,7 +112,12 @@ src/
            PlayerCamera.js mouse look, recoil springs, shake, ADS FOV blending
            PlayerController.js keyboard/mouse + Pointer Lock
   weapons/ Weapon.js       fire timing, spread, reload state machine, hitscan
-           AssaultRifle.js the KV-9 viewmodel and stats
+           AssaultRifle.js the procedural KV-9 viewmodel and stats
+           ModelRifle.js   the same rig built from an imported mesh
+           GunGeometry.js  orienting, anchoring and splitting imported meshes
+           Arms.js         first-person arms split from a mirrored pair
+           Hands.js        the procedural gloved hands
+           Loadout.js      which models are used and how they are fitted
   enemies/ Enemy.js        low-poly humanoid, procedural animation, hit zones
            EnemyAI.js      the FSM, perception, navigation, shooting
            EnemyManager.js squad, pooling, respawns, gunshot broadcast
@@ -156,11 +188,31 @@ npm run build      # -> dist/
 npm run preview    # verify the production bundle locally
 ```
 
+## Assets and licences
+
+| Asset | Used for | Credit | Licence |
+| --- | --- | --- | --- |
+| `ak47.glb` | the rifle | **Assault Rifle** by [Zsky](https://poly.pizza/u/Zsky) via [Poly Pizza](https://poly.pizza/) | CC BY |
+| `pistol.glb` | the sidearm | **Pistol** by [Zsky](https://poly.pizza/u/Zsky) via [Poly Pizza](https://poly.pizza/) | CC BY |
+| `knife.glb` | the melee weapon | **Knife** by [Quaternius](https://quaternius.com/) | Public domain (CC0) |
+| `arms.glb` | first-person arms | **Low Poly Arms** by [yalcinn1284](https://sketchfab.com/yalcinn1284) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| `guns_low_poly.glb` | unused (kept as a source of further weapons) | **Guns Low poly** by [Satendra Saraswat](https://sketchfab.com/satendra5286) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+
+All model files live in `public/assets/models/`.
+
+The CC BY assets require attribution wherever the work is distributed — the
+credit line in the main-menu footer and this table are that attribution. Keep
+both if you fork or deploy this. The knife is public domain and needs no
+attribution; it is credited anyway.
+
+Poly Pizza states "CC-BY" without a version on its download dialog — check the
+model's own page for the exact version if that distinction matters to you.
+
 ## Originality
 
-Everything here is original: the name, the map, the weapon, the characters, the
-UI, the audio and the code. No assets, audio, branding, maps or UI from any
-commercial game are used or reproduced.
+Apart from the weapon model credited above, everything here is original: the
+name, the map, the characters, the UI, the audio and the code. No assets, audio,
+branding, maps or UI from any commercial game are used or reproduced.
 
 ## License
 

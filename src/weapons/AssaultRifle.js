@@ -14,7 +14,8 @@ import { boxGeom, cylGeom, mergeParts } from '../world/Geo.js';
 import { glowTexture } from '../world/Textures.js';
 import { MuzzleFlash } from '../effects/MuzzleFlash.js';
 
-const CONFIG = {
+/** Shared by any rifle that uses these stats, including imported models. */
+export const RIFLE_CONFIG = {
   name: 'KV-9 “WIDOWMAKER”',
   magSize: 30,
   reserveMax: 120,
@@ -34,7 +35,7 @@ const CONFIG = {
 
 export class AssaultRifle extends Weapon {
   constructor(game) {
-    super(game, CONFIG);
+    super(game, RIFLE_CONFIG);
   }
 
   buildModel() {

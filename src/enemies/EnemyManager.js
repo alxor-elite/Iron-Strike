@@ -11,6 +11,8 @@ import { Enemy } from './Enemy.js';
 import { AIState } from './EnemyAI.js';
 import { glowTexture } from '../world/Textures.js';
 import { randRange } from '../utils/MathUtils.js';
+import { RIFLE_MODEL, ENEMY_RIFLE } from '../weapons/Loadout.js';
+import { collectParts, anchorGunParts, prepareGunMaterial } from '../weapons/GunGeometry.js';
 
 const CORPSE_TIME = 3.0;
 const RESPAWN_TIME = 3.0;
@@ -26,11 +28,13 @@ export class EnemyManager {
     game.scene.add(this.group);
 
     this.materials = createEnemyMaterials();
+    // the squad carries the same rifle the player does, when it is available
+    this.gunAsset = createEnemyGun(game.loadout && game.loadout.rifle);
     this.enemies = [];
     this._respawnQueue = [];
 
     for (let i = 0; i < count; i++) {
-      const e = new Enemy(this, i, this.materials);
+      const e = new Enemy(this, i, this.materials, this.gunAsset);
       this.group.add(e.root);
       this.enemies.push(e);
     }
@@ -95,8 +99,9 @@ export class EnemyManager {
       this.game.player.stats.kills++;
       this.game.hud.showKillPopup(enemy.name, zone === 'head');
       // scavenged magazines: 150 rounds would never cover a 30-kill match
-      const w = this.game.weapon;
-      if (w) w.reserve = Math.min(w.reserveMax, w.reserve + 25);
+      for (const w of this.game.weapons) {
+        if (!w.melee) w.reserve = Math.min(w.reserveMax, w.reserve + 25);
+      }
     }
     // schedule the corpse for cleanup, then a respawn
     this._respawnQueue.push({ enemy, time: CORPSE_TIME + RESPAWN_TIME, corpse: true });
@@ -159,27 +164,65 @@ export class EnemyManager {
   dispose() {
     this.enemies.forEach((e) => e.dispose());
     Object.values(this.materials).forEach((m) => m && m.dispose && m.dispose());
+    if (this.gunAsset) {
+      this.gunAsset.forEach((p) => { p.geometry.dispose(); p.material.dispose(); });
+    }
     this.game.scene.remove(this.group);
   }
 }
 
+/**
+ * One shared rifle geometry for the whole squad, anchored in the hand space the
+ * enemy rig expects. Returns null when no model pack is loaded, in which case
+ * the enemies fall back to their procedural gun.
+ */
+function createEnemyGun(model) {
+  if (!model) return null;
+  const parts = collectParts(model);
+  anchorGunParts(parts, {
+    basis: RIFLE_MODEL.transform.basis,
+    length: ENEMY_RIFLE.length,
+    muzzleZ: ENEMY_RIFLE.muzzleZ,
+    barrelY: ENEMY_RIFLE.barrelY
+  });
+  return parts.map((p) => ({
+    geometry: p.geometry,
+    material: prepareGunMaterial(p.material, RIFLE_MODEL.transform.material)
+  }));
+}
+
 function createEnemyMaterials() {
-  const std = (color, roughness = 0.85, metalness = 0.08) =>
-    new THREE.MeshStandardMaterial({ color, roughness, metalness });
+  // Every part carries a little self-illumination keyed off its own colour, so
+  // an operator standing in a building's shadow still reads as a figure rather
+  // than a black cut-out — the price of a bright midday sun is deep shade.
+  const std = (color, roughness = 0.85, metalness = 0.08) => new THREE.MeshStandardMaterial({
+    color, roughness, metalness,
+    emissive: new THREE.Color(color).multiplyScalar(0.55),
+    emissiveIntensity: 0.5
+  });
   return {
-    fatigueA: std(0x4a4f42),
-    fatigueB: std(0x3f4348),
-    fatigueC: std(0x54493c),
-    vest: std(0x2c2b29, 0.78, 0.12),
-    helmet: std(0x2a2e30, 0.7, 0.2),
+    fatigueA: std(0x5c6350),
+    fatigueB: std(0x4e545a),
+    fatigueC: std(0x685c4a),
+    vest: std(0x3a3936, 0.78, 0.12),
+    helmet: std(0x373b3d, 0.7, 0.2),
     visor: new THREE.MeshBasicMaterial({ color: 0xff5334 }),
-    skin: std(0x6d5442, 0.9, 0.02),
-    gloves: std(0x22201d, 0.95, 0.02),
-    boots: std(0x1a1917, 0.9, 0.05),
-    gun: std(0x2f3337, 0.5, 0.6),
+    skin: std(0x8a6b55, 0.9, 0.02),
+    gloves: std(0x2e2b27, 0.95, 0.02),
+    boots: std(0x252321, 0.9, 0.05),
+    gun: std(0x3b4045, 0.5, 0.6),
     flash: new THREE.SpriteMaterial({
       map: glowTexture(), color: 0xffd27a, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false
+    }),
+    // Threat halo. Sits at the operator's centre of mass and is occluded by the
+    // body itself, so what reads on screen is a glow around the silhouette —
+    // enough to pick a hostile out of cover without seeing through walls.
+    // Cloned per enemy (opacity is animated individually); fog is off so the
+    // glow survives at long range.
+    halo: new THREE.SpriteMaterial({
+      map: glowTexture(), color: 0xff4a22, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false
     })
   };
 }

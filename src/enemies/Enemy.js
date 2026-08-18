@@ -19,14 +19,22 @@ const CROUCH_HEIGHT = 1.22;
 const GRAVITY = 24;
 const MAX_HEALTH = 100;
 
+// threat-halo tuning: it stays subtle up close and opens up with range so a
+// distant operator still separates from the industrial clutter
+const HALO_OPACITY_NEAR = 0.55;
+const HALO_OPACITY_FAR = 0.95;
+const HALO_FAR_DIST = 55;
+
 const _v = new THREE.Vector3();
 
 export class Enemy {
-  constructor(manager, index, materials) {
+  constructor(manager, index, materials, gunAsset = null) {
     this.manager = manager;
     this.game = manager.game;
     this.index = index;
     this.mats = materials;
+    /** Imported rifle shared by the squad; null falls back to the built-in one. */
+    this.gunAsset = gunAsset;
     this.name = `VULTURE ${String(index + 1).padStart(2, '0')}`;
     this.team = 'B';
 
@@ -58,6 +66,7 @@ export class Enemy {
     this._healthBarTimer = 0;
     this._recoil = 0;
     this._aimBlend = 0;
+    this._haloPhase = Math.random() * 6.28;
 
     this.root = new THREE.Group();
     this.root.name = this.name;
@@ -198,7 +207,9 @@ export class Enemy {
     hips.add(legL.hip, legR.hip);
 
     // ---------- weapon ----------
-    const wParts = [
+    // the imported rifle is pre-anchored to this same hand space, so it drops
+    // straight in where the procedural gun would have gone
+    const buildProceduralGun = () => mergeParts([
       { geom: boxGeom(0.05, 0.09, 0.34, 3), pos: [0, 0, -0.04] },
       { geom: boxGeom(0.04, 0.05, 0.2, 3), pos: [0, 0.02, -0.28] },
       { geom: cylGeom(0.012, 0.012, 0.2, 6), pos: [0, 0.03, -0.44], rot: [Math.PI / 2, 0, 0] },
@@ -206,8 +217,19 @@ export class Enemy {
       { geom: boxGeom(0.04, 0.1, 0.06, 3), pos: [0, -0.09, -0.02], rot: [0.3, 0, 0] },  // mag
       { geom: boxGeom(0.045, 0.07, 0.14, 3), pos: [0, -0.01, 0.19] },                    // stock
       { geom: boxGeom(0.03, 0.02, 0.22, 4), pos: [0, 0.06, -0.06] }                      // rail
-    ];
-    const weapon = new THREE.Mesh(mergeParts(wParts), this.mats.gun);
+    ]);
+    let weapon;
+    if (this.gunAsset) {
+      weapon = new THREE.Group();
+      for (const part of this.gunAsset) {
+        const piece = new THREE.Mesh(part.geometry, part.material);
+        piece.raycast = () => {};
+        piece.userData.sharedGeometry = true;
+        weapon.add(piece);
+      }
+    } else {
+      weapon = new THREE.Mesh(buildProceduralGun(), this.mats.gun);
+    }
     weapon.raycast = () => {}; // the gun must not soak bullets
     weapon.position.set(0, -0.26, -0.12);
     weapon.rotation.set(0, 0, 0);
@@ -245,10 +267,20 @@ export class Enemy {
     barGroup.add(barBg, barFill);
     barGroup.visible = false;
 
+    // ---------- threat halo ----------
+    // Parented to the root rather than the body so the death slump does not
+    // drag it around; it is faded out by _updateDeath instead.
+    const halo = new THREE.Sprite(this.mats.halo.clone());
+    halo.scale.set(2.5, 2.9, 1);
+    halo.position.y = 1.02;
+    halo.renderOrder = 4;
+    halo.raycast = () => {};
+    halo.visible = false;
+
     // ---------- assemble ----------
     const body = new THREE.Group();   // lean / bob container
     body.add(torso, hips, barGroup);
-    this.root.add(body);
+    this.root.add(body, halo);
 
     this.root.traverse((o) => {
       if (o.isMesh) {
@@ -261,7 +293,7 @@ export class Enemy {
     this.parts = {
       body, torso, hips, headPivot, head, helmet, visor,
       armL, armR, legL, legR, weapon, flash, muzzlePoint,
-      barGroup, barFill
+      barGroup, barFill, halo
     };
   }
 
@@ -289,6 +321,8 @@ export class Enemy {
     this.parts.body.position.set(0, 0, 0);
     this.parts.barGroup.visible = false;
     this.parts.flash.visible = false;
+    this.parts.halo.visible = true;
+    this.parts.halo.material.opacity = HALO_OPACITY_NEAR;
     this.ai.reset();
     this._updateEye();
   }
@@ -297,6 +331,7 @@ export class Enemy {
     this.active = false;
     this.alive = false;
     this.root.visible = false;
+    this.parts.halo.visible = false;
   }
 
   _updateEye() {
@@ -332,6 +367,7 @@ export class Enemy {
     this._deathDir = Math.random() < 0.5 ? -1 : 1;
     this.parts.barGroup.visible = false;
     this.parts.flash.visible = false;
+    this._haloFade = this.parts.halo.material.opacity;
     this.ai.state = AIState.DEAD;
     this.game.audio.play('enemyDeath', { position: this.position, volume: 0.8 });
     this.game.effects.spawnDeathPuff(this.position);
@@ -397,14 +433,41 @@ export class Enemy {
       }
     }
 
+    this._updateHalo(dt);
+
     if (this._muzzleTimer > 0) {
       this._muzzleTimer -= dt;
       if (this._muzzleTimer <= 0) this.parts.flash.visible = false;
     }
   }
 
+  /** Breathing threat glow, stronger the further away the operator is. */
+  _updateHalo(dt) {
+    const halo = this.parts.halo;
+    if (!halo.visible) return;
+    this._haloPhase += dt * 2.1;
+
+    const cam = this.game.camera.position;
+    const dist = Math.hypot(cam.x - this.position.x, cam.z - this.position.z);
+    const range = clamp(dist / HALO_FAR_DIST, 0, 1);
+    const base = lerp(HALO_OPACITY_NEAR, HALO_OPACITY_FAR, range);
+    const pulse = 1 + Math.sin(this._haloPhase) * 0.12;
+
+    halo.material.opacity = base * pulse;
+    halo.position.y = this.height * 0.57;
+    const s = (this.crouching ? 2.3 : 2.9) * pulse;
+    halo.scale.set(s, s * 1.14, 1);
+  }
+
   _updateDeath(dt) {
     this._deathTimer += dt;
+    // the threat glow dies with the operator
+    const halo = this.parts.halo;
+    if (halo.visible) {
+      this._haloFade = Math.max(0, this._haloFade - dt * 2.4);
+      halo.material.opacity = this._haloFade;
+      if (this._haloFade <= 0) halo.visible = false;
+    }
     const t = Math.min(1, this._deathTimer / 0.75);
     const ease = 1 - (1 - t) * (1 - t);
     const body = this.parts.body;
@@ -515,8 +578,12 @@ export class Enemy {
 
   dispose() {
     this.root.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
+      // the imported rifle's geometry belongs to the manager, not to us
+      if (o.geometry && !o.userData.sharedGeometry) o.geometry.dispose();
     });
+    // the per-enemy sprite materials are clones, so they are ours to release
+    this.parts.flash.material.dispose();
+    this.parts.halo.material.dispose();
     this.root.parent?.remove(this.root);
   }
 }
