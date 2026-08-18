@@ -453,10 +453,16 @@ html, body {
 .btn-arrow { color: var(--amber); opacity: 0.7; }
 
 .menu-foot {
-  display: flex; justify-content: space-between;
+  /* the attribution line is long and must stay legible, so it wraps on its own
+     row rather than colliding with the build tag */
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
   font-size: 10px; letter-spacing: 3px; color: rgba(159,176,189,0.35);
   position: absolute; bottom: 24px; left: clamp(30px, 8vw, 130px); right: clamp(30px, 8vw, 130px);
 }
+.menu-foot > span:first-child {
+  max-width: 78%; letter-spacing: 2px; line-height: 1.6;
+}
+.menu-foot #build-tag { white-space: nowrap; }
 
 /* --- panels --- */
 .panel {

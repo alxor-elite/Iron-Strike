@@ -25,7 +25,9 @@ export class PlayerController {
       firePressed: false,
       ads: false,
       reloadQueued: false,
-      scoreboard: false
+      scoreboard: false,
+      slotQueued: -1,      // 0-based weapon slot requested this frame, -1 = none
+      slotCycle: 0         // +1 / -1 from the scroll wheel
     };
 
     this._keys = new Set();
@@ -62,6 +64,12 @@ export class PlayerController {
           break;
         case 'KeyF':
           if (this.onFlashlight) this.onFlashlight();
+          break;
+        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+          this.state.slotQueued = Number(e.code.slice(5)) - 1;
+          break;
+        case 'KeyQ':
+          this.state.slotCycle = 1;   // quick-swap reads as one step forward
           break;
         default:
           break;
@@ -103,6 +111,12 @@ export class PlayerController {
 
     this._onContext = (e) => e.preventDefault();
 
+    this._onWheel = (e) => {
+      if (!this.enabled || !this.locked) return;
+      this.state.slotCycle += e.deltaY > 0 ? 1 : -1;
+      e.preventDefault();
+    };
+
     this._onLockChange = () => {
       const wasLocked = this.locked;
       this.locked = document.pointerLockElement === this.dom;
@@ -136,6 +150,7 @@ export class PlayerController {
     this.dom.addEventListener('mousedown', this._onMouseDown);
     window.addEventListener('mouseup', this._onMouseUp);
     this.dom.addEventListener('contextmenu', this._onContext);
+    this.dom.addEventListener('wheel', this._onWheel, { passive: false });
     document.addEventListener('mousemove', this._onMouseMove);
     document.addEventListener('pointerlockchange', this._onLockChange);
     document.addEventListener('pointerlockerror', this._onLockError);
@@ -175,6 +190,8 @@ export class PlayerController {
     this.state.jumpQueued = false;
     this.state.firePressed = false;
     this.state.reloadQueued = false;
+    this.state.slotQueued = -1;
+    this.state.slotCycle = 0;
   }
 
   dispose() {
@@ -184,6 +201,7 @@ export class PlayerController {
     this.dom.removeEventListener('mousedown', this._onMouseDown);
     window.removeEventListener('mouseup', this._onMouseUp);
     this.dom.removeEventListener('contextmenu', this._onContext);
+    this.dom.removeEventListener('wheel', this._onWheel);
     document.removeEventListener('mousemove', this._onMouseMove);
     document.removeEventListener('pointerlockchange', this._onLockChange);
     document.removeEventListener('pointerlockerror', this._onLockError);

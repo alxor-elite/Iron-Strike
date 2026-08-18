@@ -194,7 +194,7 @@ export class GameMap {
     const cx = Math.round(playerPos.x / snap) * snap;
     const cz = Math.round(playerPos.z / snap) * snap;
     sun.target.position.set(cx, 0, cz);
-    sun.position.set(cx + 58, 76, cz + 34);
+    sun.position.set(cx + 44, 96, cz + 26);
     sun.target.updateMatrixWorld();
   }
 
@@ -202,7 +202,12 @@ export class GameMap {
     this._t += dt;
     const pulse = 0.45 + Math.sin(this._t * 2.6) * 0.22;
     for (const b of this.beacons) b.material.opacity = pulse;
-    if (playerPos) this.updateSunShadow(playerPos);
+    if (playerPos) {
+      this.updateSunShadow(playerPos);
+      // keep the sky dome centred on the player, otherwise its equator cuts a
+      // visible arc across the sky from anywhere but the middle of the map
+      if (this.sky) this.sky.position.set(playerPos.x, 0, playerPos.z);
+    }
   }
 
   dispose() {

@@ -104,23 +104,26 @@ export function buildLighting(map, quality) {
   const scene = map.scene;
   const lights = { dynamic: [], sun: null, hemi: null, ambient: null };
 
-  const hemi = new THREE.HemisphereLight(0x7d9cbd, 0x46403a, 1.75);
+  // Midday: a bright sky dome plus a strong overhead sun. The ground term is
+  // kept light too so shadowed sides of props (and the operators standing in
+  // them) never fall below readable brightness.
+  const hemi = new THREE.HemisphereLight(0xd6e8ff, 0x9d9481, 2.6);
   scene.add(hemi);
   lights.hemi = hemi;
 
-  const ambient = new THREE.AmbientLight(0x515c6b, 0.8);
+  const ambient = new THREE.AmbientLight(0xc3d3e2, 1.15);
   scene.add(ambient);
   lights.ambient = ambient;
 
-  const sun = new THREE.DirectionalLight(0xffd7ab, 3.1);
-  sun.position.set(58, 76, 34);
+  const sun = new THREE.DirectionalLight(0xfff6e6, 3.5);
+  sun.position.set(44, 96, 26);
   sun.target.position.set(0, 0, 0);
   scene.add(sun);
   scene.add(sun.target);
   lights.sun = sun;
 
   // cool rim/fill from the opposite side, no shadow cost
-  const fill = new THREE.DirectionalLight(0x86aacd, 1.15);
+  const fill = new THREE.DirectionalLight(0xbcd8f2, 1.5);
   fill.position.set(-50, 34, -46);
   scene.add(fill);
   lights.fill = fill;
@@ -152,7 +155,8 @@ export function buildLighting(map, quality) {
     map.decor.add(stem);
 
     if (i < maxLights) {
-      const pl = new THREE.PointLight(0xffb964, 2.6, 26, 2);
+      // sodium lamps read as a warm accent in daylight, not the main source
+      const pl = new THREE.PointLight(0xffc07a, 1.3, 24, 2);
       pl.position.set(p[0], p[1] - 0.1, p[2]);
       scene.add(pl);
       lights.dynamic.push(pl);
@@ -192,12 +196,16 @@ export function applyShadowQuality(lights, quality) {
 /* ================================================================== sky ==== */
 
 export function buildSky(map) {
-  const geo = new THREE.SphereGeometry(320, 24, 14);
+  // comfortably inside the camera's 320 far plane — the dome is centred on the
+  // player, so anything at 320 would be clipped away exactly at the horizon
+  const geo = new THREE.SphereGeometry(260, 24, 14);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      topColor: { value: new THREE.Color(0x2b4a6d) },
-      midColor: { value: new THREE.Color(0x7d92a8) },
-      botColor: { value: new THREE.Color(0xe0ac7e) }
+      topColor: { value: new THREE.Color(0x3f83c8) },
+      midColor: { value: new THREE.Color(0xa8cdea) },
+      // close to midColor: the dome's equator is off-centre from the player, so
+      // a strong horizon colour draws a visible arc across the sky
+      botColor: { value: new THREE.Color(0xbdd7e9) }
     },
     vertexShader: /* glsl */`
       varying float vH;
@@ -227,7 +235,9 @@ export function buildSky(map) {
   const sky = new THREE.Mesh(geo, mat);
   sky.frustumCulled = false;
   map.scene.add(sky);
-  map.scene.fog = new THREE.Fog(0x6d829c, 55, 215);
+  // thin daylight haze: starts late and ends past the far wall so distant
+  // targets stay readable instead of dissolving into the backdrop
+  map.scene.fog = new THREE.Fog(0xc2d8ea, 95, 320);
   return sky;
 }
 

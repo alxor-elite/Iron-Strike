@@ -16,19 +16,27 @@ import { GameMap } from '../world/Map.js';
 import { Player } from '../player/Player.js';
 import { PlayerCamera } from '../player/PlayerCamera.js';
 import { PlayerController } from '../player/PlayerController.js';
-import { AssaultRifle } from '../weapons/AssaultRifle.js';
+import { loadLoadout, createWeapons } from '../weapons/Loadout.js';
 import { EnemyManager } from '../enemies/EnemyManager.js';
 import { HitEffects } from '../effects/HitEffect.js';
 import { AudioManager } from '../audio/AudioManager.js';
+import { registerSoundFiles } from '../audio/SoundFiles.js';
 import { setRaycastCamera } from '../utils/RaycastUtils.js';
 
 import { HUD } from '../ui/HUD.js';
 import { MainMenu, SettingsPanel, ControlsPanel } from '../ui/MainMenu.js';
 import { PauseMenu } from '../ui/PauseMenu.js';
-import { LoadingScreen, ResumePrompt, DeathScreen, ResultsScreen } from '../ui/Screens.js';
+import { LoadingScreen, ResumePrompt, DeathScreen, ResultsScreen, FatalScreen } from '../ui/Screens.js';
 
 const RESPAWN_DELAY = 3.0;
+/** How long a weapon swap locks out firing and further swapping. */
+const SWAP_TIME = 0.42;
 const MAX_DT = 1 / 20;
+/** Consecutive failed frames before we stop pretending the session is alive. */
+const FATAL_ERROR_STREAK = 20;
+/** …or this many errors from anywhere within this window. */
+const ERROR_BURST_LIMIT = 30;
+const ERROR_BURST_WINDOW = 10000;
 
 export class Game {
   constructor(canvas) {
@@ -42,6 +50,10 @@ export class Game {
     this._respawnTimer = 0;
     this._killerName = null;
     this.built = false;
+    this._frameErrors = 0;
+    this.contextLost = false;
+    /** Rolling log of recovered errors — handy when diagnosing a report. */
+    this.errorLog = [];
 
     this.settings = new Settings();
     this.state = new StateMachine(GameState.BOOT);
@@ -57,9 +69,9 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.3;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.setClearColor(0x05070a, 1);
+    this.renderer.setClearColor(0xa8cdea, 1);
 
     /* --------------------------------------------------------------- scene */
     this.scene = new THREE.Scene();
@@ -75,11 +87,11 @@ export class Game {
     this.viewCamera = new THREE.PerspectiveCamera(
       58, window.innerWidth / window.innerHeight, 0.005, 6
     );
-    this.viewScene.add(new THREE.AmbientLight(0x8fa2b4, 1.5));
-    const vKey = new THREE.DirectionalLight(0xfff1dc, 2.2);
+    this.viewScene.add(new THREE.AmbientLight(0xbfd2e2, 1.9));
+    const vKey = new THREE.DirectionalLight(0xfff6e6, 2.6);
     vKey.position.set(0.6, 1, 0.55);
     this.viewScene.add(vKey);
-    const vFill = new THREE.DirectionalLight(0x6f8ea8, 1.1);
+    const vFill = new THREE.DirectionalLight(0x9fbdd6, 1.35);
     vFill.position.set(-0.7, 0.2, -0.6);
     this.viewScene.add(vFill);
 
@@ -94,7 +106,11 @@ export class Game {
     this.map = null;
     this.effects = null;
     this.enemyManager = null;
+    /** Every weapon the player carries, in slot order. */
+    this.weapons = [];
+    this.weaponIndex = 0;
     this.weapon = null;
+    this._swapTimer = 0;
     this.raycastTargets = [];
     this.aimDir = new THREE.Vector3(0, 0, -1);
 
@@ -123,6 +139,27 @@ export class Game {
 
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
+
+    // A GPU driver reset (or the browser reclaiming the context under memory
+    // pressure) kills the WebGL context mid-match. Three re-initialises itself
+    // on restore, so all we do is stop the world, say what happened, and pick
+    // up again — instead of leaving the player staring at a frozen screen.
+    this._onContextLost = () => {
+      this.contextLost = true;
+      if (this.state.is(GameState.PLAYING, GameState.DEAD)) this.pause();
+      console.warn('[game] WebGL context lost — waiting for the browser to restore it');
+      if (this.hud) this.hud.showBanner('GRAPHICS CONTEXT LOST — RESTORING…');
+    };
+    this._onContextRestored = () => {
+      this.contextLost = false;
+      this._frameErrors = 0;
+      console.info('[game] WebGL context restored');
+      this.applyQuality(this.settings.get('quality'));
+      this.resize();
+      if (this.hud) this.hud.showBanner('GRAPHICS RESTORED');
+    };
+    canvas.addEventListener('webglcontextlost', this._onContextLost, false);
+    canvas.addEventListener('webglcontextrestored', this._onContextRestored, false);
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state.is(GameState.PLAYING, GameState.DEAD)) this.pause();
     });
@@ -217,14 +254,27 @@ export class Game {
       this.map.collision.groundHeightAt(x, z, this.player.position.y + 1.4, 0.06));
     await frame();
 
-    loading.setProgress(0.86, 'Briefing hostile squad…');
+    // loaded before the squad, because the enemies carry the same rifle
+    // samples, if any have been installed; missing ones stay procedural
+    registerSoundFiles(this.audio).then((n) => {
+      if (n) console.info(`[audio] ${n} cue${n === 1 ? '' : 's'} using installed samples`);
+    });
+
+    loading.setProgress(0.84, 'Unpacking weapon models…');
+    this.loadout = await loadLoadout();
+    await frame();
+
+    loading.setProgress(0.88, 'Briefing hostile squad…');
     this.enemyManager = new EnemyManager(this, 6);
     this.raycastTargets = [this.map.solids, this.enemyManager.group];
     await frame();
 
-    loading.setProgress(0.9, 'Issuing weapon…');
-    this.weapon = new AssaultRifle(this);
-    this.hud.setWeaponName(this.weapon.name);
+    loading.setProgress(0.92, 'Issuing weapons…');
+    this.weapons = createWeapons(this, this.loadout);
+    // every weapon adds itself to the viewmodel scene, so stow them all and
+    // let selectWeapon bring one out
+    this.weapons.forEach((w) => { w.group.visible = false; });
+    this.selectWeapon(0, true);
     await frame();
 
     // Compile every shader up front. On weak drivers this is seconds of work;
@@ -262,8 +312,11 @@ export class Game {
     try {
       if (!this.built) await this.build();
     } catch (err) {
+      // there is no world to fall back into, so this one really is fatal
       console.error('[game] build failed', err);
-      throw err;
+      this.ui.loading.hide();
+      FatalScreen.show(`Failed to build the match\n\n${(err && err.stack) || String(err)}`);
+      return;
     }
 
     this._beginMatch();
@@ -276,7 +329,8 @@ export class Game {
     p.stats = { shotsFired: 0, hits: 0, headshots: 0, damageDealt: 0, deaths: 0, kills: 0 };
     this.effects.clear();
     this.hud.reset();
-    this.weapon.reset();
+    this.weapons.forEach((w) => w.reset());
+    this.selectWeapon(0, true);
 
     const spawn = this.map.getSpawn('A', null, 0, true);
     const yaw = Math.atan2(spawn.x, spawn.z); // face the middle of the map
@@ -286,10 +340,44 @@ export class Game {
     this.match.start();
 
     this.hud.show();
-    this.hud.setWeaponName(this.weapon.name);
     this.state.set(GameState.PLAYING);
     this.controller.setEnabled(true);
     this.requestLock();
+  }
+
+  /**
+   * Put a weapon in the player's hands. Only the active one is visible and
+   * updated, so the others cost nothing but memory.
+   *
+   * @param {number} index slot, wrapped into range
+   * @param {boolean} [immediate] skip the swap delay (spawning, match start)
+   */
+  selectWeapon(index, immediate = false) {
+    if (!this.weapons.length) return;
+    const count = this.weapons.length;
+    const next = ((index % count) + count) % count;
+    if (this.weapon && next === this.weaponIndex && !immediate) return;
+
+    if (this.weapon) {
+      this.weapon.group.visible = false;
+      this.weapon.onHolster?.();
+    }
+    this.weaponIndex = next;
+    this.weapon = this.weapons[next];
+    this.weapon.group.visible = true;
+    this._swapTimer = immediate ? 0 : SWAP_TIME;
+    this.hud.setWeaponName(this.weapon.name);
+    if (!immediate) this.audio.play('weaponSwap', { volume: 0.5 });
+  }
+
+  /** Slot keys, the quick-swap key and the scroll wheel. */
+  _handleWeaponSwitch(input) {
+    if (this._swapTimer > 0) return;
+    if (input.slotQueued >= 0 && input.slotQueued < this.weapons.length) {
+      this.selectWeapon(input.slotQueued);
+    } else if (input.slotCycle) {
+      this.selectWeapon(this.weaponIndex + input.slotCycle);
+    }
   }
 
   restartMatch() {
@@ -373,7 +461,8 @@ export class Game {
     }
     const yaw = Math.atan2(spawn.x, spawn.z);
     this.player.spawn(spawn, yaw);
-    this.weapon.reset();
+    this.weapons.forEach((w) => w.reset());
+    this.selectWeapon(0, true);
     this.ui.death.hide();
     this.state.set(GameState.PLAYING);
     this.audio.play('spawn', { volume: 0.5 });
@@ -411,9 +500,41 @@ export class Game {
       this.ui.settings.setFps(this.fps);
     }
 
-    this.step(dt);
-    this._render();
+    // A thrown frame must not take the session down: log it, drop the frame and
+    // keep going. Only a frame that fails over and over is genuinely fatal.
+    try {
+      this.step(dt);
+      this._render();
+      this._frameErrors = 0;
+    } catch (err) {
+      this.reportError(err, 'Frame error');
+    }
     this.frameCount++;
+  }
+
+  /**
+   * Central error sink. Recoverable problems are logged (and surfaced as a HUD
+   * banner) so play continues; only a persistent failure escalates to the
+   * fatal screen.
+   */
+  reportError(err, context = 'Error') {
+    const now = Date.now();
+    this.errorLog.push({ at: now, context, message: String((err && err.message) || err), stack: err && err.stack });
+    if (this.errorLog.length > 40) this.errorLog.shift();
+    console.error(`[game] ${context}:`, err);
+
+    // Two independent escalations: a frame that keeps throwing (the loop is
+    // wedged) and a storm of errors from anywhere else in a short window.
+    const wedged = context === 'Frame error' && ++this._frameErrors >= FATAL_ERROR_STREAK;
+    const recent = this.errorLog.filter((e) => now - e.at < ERROR_BURST_WINDOW).length;
+    if (wedged || recent >= ERROR_BURST_LIMIT) {
+      FatalScreen.show(`${context}\n\n${(err && err.stack) || String(err)}`);
+      return;
+    }
+    if (this.hud && now - (this._lastErrorBanner || 0) > 5000) {
+      this._lastErrorBanner = now;
+      this.hud.showBanner('RECOVERED FROM AN ERROR');
+    }
   }
 
   /**
@@ -461,7 +582,20 @@ export class Game {
     this.camera.updateMatrixWorld();
     this.playerCamera.getAimDirection(this.aimDir);
 
-    this.weapon.update(dt, input);
+    this._swapTimer = Math.max(0, this._swapTimer - dt);
+    this._handleWeaponSwitch(input);
+    // a weapon coming up cannot fire or reload yet
+    const swapping = this._swapTimer > 0;
+    this.weapon.update(dt, swapping
+      ? { ...input, firing: false, firePressed: false, reloadQueued: false }
+      : input);
+    if (swapping) {
+      // raise it into view rather than having it appear fully aimed
+      const k = this._swapTimer / SWAP_TIME;
+      this.weapon.group.position.y -= k * 0.22;
+      this.weapon.group.position.z += k * 0.10;
+      this.weapon.group.rotation.x += k * 0.55;
+    }
 
     this.enemyManager.update(dt);
     this.effects.update(dt);
@@ -475,6 +609,7 @@ export class Game {
   }
 
   _render() {
+    if (this.contextLost) return;
     const st = this.state.current;
     if (!this.built || st === GameState.MENU || st === GameState.LOADING) {
       this.renderer.clear();
@@ -493,8 +628,10 @@ export class Game {
 
   dispose() {
     window.removeEventListener('resize', this._onResize);
+    this.canvas.removeEventListener('webglcontextlost', this._onContextLost);
+    this.canvas.removeEventListener('webglcontextrestored', this._onContextRestored);
     this.controller.dispose();
-    if (this.weapon) this.weapon.dispose();
+    this.weapons.forEach((w) => w.dispose());
     if (this.enemyManager) this.enemyManager.dispose();
     if (this.effects) this.effects.dispose();
     if (this.map) this.map.dispose();

@@ -503,7 +503,7 @@ export class EnemyAI {
     enemy.onFireVisuals();
     enemy.getMuzzleWorld(this._muzzle);
     game.audio.play('enemyFire', {
-      position: enemy.position, volume: 0.85, rate: 0.95 + Math.random() * 0.1, refDistance: 14
+      position: enemy.position, volume: 0.5, rate: 0.94 + Math.random() * 0.12, refDistance: 10
     });
 
     // aim at the player's centre of mass, then add error

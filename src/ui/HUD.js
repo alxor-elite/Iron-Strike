@@ -117,16 +117,19 @@ export class HUD {
 
     // ---- ammo ----
     if (weapon) {
-      if (weapon.ammo !== this._cache.ammo) {
-        this._cache.ammo = weapon.ammo;
-        this.ammoMag.textContent = String(weapon.ammo);
-        this.ammoMag.classList.toggle('low', weapon.ammo <= 7);
+      // a melee weapon has no rounds to count
+      const mag = weapon.melee ? '—' : String(weapon.ammo);
+      const reserve = weapon.melee ? '—' : String(weapon.reserve);
+      if (mag !== this._cache.ammo) {
+        this._cache.ammo = mag;
+        this.ammoMag.textContent = mag;
+        this.ammoMag.classList.toggle('low', !weapon.melee && weapon.ammo <= 7);
       }
-      if (weapon.reserve !== this._cache.reserve) {
-        this._cache.reserve = weapon.reserve;
-        this.ammoReserve.textContent = String(weapon.reserve);
+      if (reserve !== this._cache.reserve) {
+        this._cache.reserve = reserve;
+        this.ammoReserve.textContent = reserve;
       }
-      const needReload = !weapon.reloading && weapon.ammo <= 5 && weapon.reserve > 0;
+      const needReload = !weapon.melee && !weapon.reloading && weapon.ammo <= 5 && weapon.reserve > 0;
       this.reloadPrompt.classList.toggle('on', needReload);
       if (weapon.reloading) {
         this.reloadTrack.classList.add('on');

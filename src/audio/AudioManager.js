@@ -15,6 +15,30 @@ import * as THREE from 'three';
 
 const MAX_VOICES = 26;
 
+/**
+ * Per-cue trim, applied only to sampled cues.
+ *
+ * The synthesised cues were balanced against each other by ear; a recording
+ * dropped in over one of them arrives at whatever level it was mastered at,
+ * which is invariably far hotter. These bring the samples back down to the mix
+ * the game was built around. Only the sample path is scaled, so pulling a file
+ * out of the manifest restores the original synth balance exactly.
+ */
+const SAMPLE_GAIN = {
+  rifleFire: 0.7,
+  pistolFire: 0.75,
+  // six operators firing bursts at once; theirs has to sit well back
+  enemyFire: 0.45,
+  footstep: 0.45,
+  footstepRun: 0.45,
+  // Mechanical clicks belong under the shot itself. These are 44.1 kHz files
+  // being resampled up to the context rate, and the sharp transients overshoot
+  // by up to half again on the way, so they are trimmed harder than their file
+  // peaks alone would suggest.
+  rifleMagOut: 0.45, rifleMagIn: 0.45, rifleBolt: 0.4,
+  pistolMagOut: 0.45, pistolMagIn: 0.4
+};
+
 export class AudioManager {
   constructor(settings) {
     this.settings = settings;
@@ -22,8 +46,8 @@ export class AudioManager {
     this.master = null;
     this.ready = false;
     this.muted = false;
-    this.buffers = new Map();     // name -> AudioBuffer (loaded samples)
-    this.files = new Map();       // name -> url
+    this.buffers = new Map();     // name -> AudioBuffer[] (variant pool)
+    this.files = new Map();       // name -> url[]
     this.voices = 0;
 
     this.listenerPos = new THREE.Vector3();
@@ -80,14 +104,21 @@ export class AudioManager {
     this.listenerFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
   }
 
-  /** Optional: point a cue name at an audio file that overrides the synth. */
+  /**
+   * Point a cue at an audio file that overrides the synth. Registering several
+   * files against one cue builds a variant pool and a random one plays each
+   * time — which is what stops a burst of rifle fire or a run across the map
+   * from sounding like the same sample stamped over and over.
+   */
   registerFile(name, url) {
-    this.files.set(name, url);
+    const urls = this.files.get(name) || [];
+    urls.push(url);
+    this.files.set(name, urls);
     if (this.ready) this._loadFile(name, url);
   }
 
   loadRegisteredFiles() {
-    this.files.forEach((url, name) => this._loadFile(name, url));
+    this.files.forEach((urls, name) => urls.forEach((url) => this._loadFile(name, url)));
   }
 
   async _loadFile(name, url) {
@@ -96,7 +127,9 @@ export class AudioManager {
       if (!res.ok) return; // missing file: keep the synth version
       const arr = await res.arrayBuffer();
       const buf = await this.ctx.decodeAudioData(arr);
-      this.buffers.set(name, buf);
+      const pool = this.buffers.get(name) || [];
+      pool.push(buf);
+      this.buffers.set(name, pool);
     } catch {
       /* silently fall back to the procedural cue */
     }
@@ -143,8 +176,13 @@ export class AudioManager {
       out.connect(this.master);
     }
 
-    const sample = this.buffers.get(name);
+    const pool = this.buffers.get(name);
+    const sample = pool && pool.length
+      ? pool[pool.length === 1 ? 0 : (Math.random() * pool.length) | 0]
+      : null;
     if (sample) {
+      const trim = SAMPLE_GAIN[name];
+      if (trim != null) out.gain.value *= trim;
       const src = this.ctx.createBufferSource();
       src.buffer = sample;
       src.playbackRate.value = rate;
@@ -154,7 +192,7 @@ export class AudioManager {
       return;
     }
 
-    const synth = SYNTHS[name];
+    const synth = SYNTHS[name] || SYNTHS[CUE_ALIASES[name]];
     if (!synth) {
       // unknown cue: a soft click keeps feedback rather than silence
       this._click(out, 900, 0.03, 0.3);
@@ -244,6 +282,37 @@ const SYNTHS = {
     a._tone(out, { freq: 160 * rate, endFreq: 60, duration: 0.11, type: 'triangle', gain: 0.4 });
     return 0.2;
   },
+  /**
+   * The sidearm: shorter body, sharper crack and less low end than the rifle,
+   * so the two read as different weapons without any samples loaded.
+   */
+  pistolFire(a, out, rate) {
+    a._noiseBurst(out, { duration: 0.07, type: 'highpass', freq: 2100, q: 0.8, gain: 0.7, rate: 1.15 * rate });
+    a._noiseBurst(out, { duration: 0.13, type: 'bandpass', freq: 700, q: 1.1, gain: 0.55, curve: 3.6, rate });
+    a._tone(out, { freq: 260 * rate, endFreq: 90, duration: 0.08, type: 'triangle', gain: 0.4 });
+    return 0.18;
+  },
+  /** Knife: air moving, no transient. */
+  knifeSwing(a, out, rate) {
+    a._noiseBurst(out, { duration: 0.18, type: 'bandpass', freq: 1100 * rate, q: 0.5, gain: 0.35, attack: 0.05, curve: 2.2 });
+    return 0.2;
+  },
+  knifeHit(a, out) {
+    a._noiseBurst(out, { duration: 0.09, type: 'lowpass', freq: 1400, q: 0.8, gain: 0.6 });
+    a._tone(out, { freq: 180, endFreq: 70, duration: 0.08, type: 'triangle', gain: 0.3 });
+    return 0.14;
+  },
+  /** A pistol slide is lighter and faster than a rifle's bolt. */
+  pistolSlide(a, out) {
+    a._noiseBurst(out, { duration: 0.055, type: 'bandpass', freq: 3200, q: 1.3, gain: 0.34 });
+    a._click(out, 1500, 0.035, 0.22);
+    return 0.1;
+  },
+  weaponSwap(a, out) {
+    a._noiseBurst(out, { duration: 0.09, type: 'bandpass', freq: 1600, q: 1.1, gain: 0.3 });
+    a._tone(out, { freq: 520, endFreq: 260, duration: 0.07, type: 'triangle', gain: 0.18 });
+    return 0.12;
+  },
   dryFire(a, out) {
     a._click(out, 1500, 0.035, 0.28);
     a._noiseBurst(out, { duration: 0.04, type: 'highpass', freq: 3000, gain: 0.25 });
@@ -288,6 +357,12 @@ const SYNTHS = {
     a._noiseBurst(out, { duration: 0.075, type: 'lowpass', freq: 900 * rate, q: 0.6, gain: 0.6, curve: 3.2 });
     a._tone(out, { freq: 110 * rate, endFreq: 60, duration: 0.055, type: 'sine', gain: 0.22 });
     return 0.1;
+  },
+  /** Sprinting: heavier, with more scuff than the walking step. */
+  footstepRun(a, out, rate) {
+    a._noiseBurst(out, { duration: 0.1, type: 'lowpass', freq: 1100 * rate, q: 0.7, gain: 0.85, curve: 3 });
+    a._tone(out, { freq: 95 * rate, endFreq: 48, duration: 0.08, type: 'sine', gain: 0.34 });
+    return 0.12;
   },
   jump(a, out) {
     a._noiseBurst(out, { duration: 0.06, type: 'lowpass', freq: 700, gain: 0.35 });
@@ -379,4 +454,21 @@ const SYNTHS = {
   }
 };
 
-export const CUE_NAMES = Object.keys(SYNTHS);
+/**
+ * Per-weapon cues that have no synth of their own fall back to a shared one.
+ *
+ * This is what lets each weapon name its own cues — so dropping in
+ * `rifle_mag_out.ogg` and `pistol_mag_out.ogg` gives two different sounds —
+ * while a build with no samples at all still plays something appropriate.
+ */
+export const CUE_ALIASES = {
+  rifleReloadStart: 'reloadStart',
+  rifleMagOut: 'magOut',
+  rifleMagIn: 'magIn',
+  rifleBolt: 'boltRelease',
+  pistolReloadStart: 'reloadStart',
+  pistolMagOut: 'magOut',
+  pistolMagIn: 'magIn'
+};
+
+export const CUE_NAMES = [...Object.keys(SYNTHS), ...Object.keys(CUE_ALIASES)];
