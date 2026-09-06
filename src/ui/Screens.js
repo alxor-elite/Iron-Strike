@@ -36,6 +36,8 @@ export class ResumePrompt {
     this.el = document.getElementById('resume-prompt');
     this.el.addEventListener('click', () => {
       this.hide();
+      // this click is the gesture fullscreen + keyboard capture need
+      game.enterImmersive();
       game.requestLock();
     });
   }
