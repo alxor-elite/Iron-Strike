@@ -38,6 +38,13 @@ Click **PLAY**, then click once more to lock the mouse.
 | `ESC` | Pause / release mouse | `F` | Flashlight |
 | `1` `2` `3` | Rifle / sidearm / knife | `Q`, wheel | Cycle weapons |
 
+Crouch sits on `CTRL`, which is also the browser's shortcut modifier — held
+down, `W` closes the tab and `S` opens "save page as". While the mouse is
+locked the game cancels those shortcuts, and a match starts fullscreen so the
+Keyboard Lock API can capture the handful (`CTRL+W`, `CTRL+T`) that a page
+cannot cancel otherwise. Turn that off with **Fullscreen play** in SETTINGS;
+closing the tab mid-match then asks for confirmation instead.
+
 ## Weapons
 
 Three slots, switched with `1` `2` `3`, `Q` or the scroll wheel. Swapping takes

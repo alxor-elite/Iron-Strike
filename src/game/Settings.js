@@ -12,7 +12,8 @@ export const DEFAULTS = {
   volume: 0.7,
   invertY: false,
   cameraShake: true,
-  adsToggle: false
+  adsToggle: false,
+  fullscreen: true
 };
 
 export class Settings {

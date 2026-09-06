@@ -164,6 +164,25 @@ export class Game {
       if (document.hidden && this.state.is(GameState.PLAYING, GameState.DEAD)) this.pause();
     });
 
+    // Ctrl+W / Ctrl+T are reserved by the browser: outside of the fullscreen
+    // keyboard capture below they cannot be cancelled, and crouch is Ctrl. If
+    // one slips through, at least make the browser ask before it drops a match
+    // in progress.
+    this._onBeforeUnload = (e) => {
+      if (!this.state.is(GameState.PLAYING, GameState.DEAD, GameState.PAUSED)) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', this._onBeforeUnload);
+
+    // Leaving fullscreen by any route (F11, ESC held) drops the keyboard
+    // capture with it, so keep our own flag honest.
+    this._onFullscreenChange = () => {
+      if (!document.fullscreenElement) this.controller.unlockKeyboard();
+    };
+    document.addEventListener('fullscreenchange', this._onFullscreenChange);
+
     this.flashlight = new THREE.SpotLight(0xfff0d8, 0, 26, 0.42, 0.4, 1.4);
     this.flashlight.visible = false;
     this.camera.add(this.flashlight);
@@ -187,6 +206,8 @@ export class Game {
       this.playerCamera.onFovSettingChanged(s.fov);
     }
     if (key === 'quality' || key === '*') this.applyQuality(s.quality);
+    // turning fullscreen play off should take effect now, not next match
+    if ((key === 'fullscreen' || key === '*') && !s.fullscreen) this.exitImmersive();
     if (key === '*') this.ui.settings.syncFromSettings();
   }
 
@@ -342,6 +363,7 @@ export class Game {
     this.hud.show();
     this.state.set(GameState.PLAYING);
     this.controller.setEnabled(true);
+    this.enterImmersive();
     this.requestLock();
   }
 
@@ -392,6 +414,7 @@ export class Game {
     this.match.stop();
     this.controller.setEnabled(false);
     this.controller.releaseLock();
+    this.exitImmersive();
     this.ui.pause.hide();
     this.ui.results.hide();
     this.ui.death.hide();
@@ -409,6 +432,8 @@ export class Game {
     this.state.set(GameState.PAUSED);
     this.controller.setEnabled(false);
     this.controller.releaseLock();
+    // hand the shortcuts back while the player is in a menu
+    this.controller.unlockKeyboard();
     this.ui.resume.hide();
     this.ui.pause.show();
   }
@@ -417,7 +442,47 @@ export class Game {
     if (!this.state.is(GameState.PAUSED)) return;
     this.state.set(this._resumeState === GameState.DEAD ? GameState.DEAD : GameState.PLAYING);
     this.controller.setEnabled(true);
+    this.enterImmersive();
     this.requestLock();
+  }
+
+  /* --------------------------------------------------- immersive play mode */
+
+  /**
+   * Go fullscreen and take the browser-reserved shortcuts with us.
+   *
+   * Crouch is Ctrl, so crouch-walking spells out Ctrl+W (close tab), Ctrl+S
+   * (save page), Ctrl+D (bookmark) and friends. The controller cancels the
+   * cancellable ones; Ctrl+W and Ctrl+T only reach a page through the Keyboard
+   * Lock API, which the browser grants in fullscreen alone. Called from the
+   * click that starts or resumes the match, since fullscreen needs a gesture.
+   */
+  enterImmersive() {
+    if (!this.settings.get('fullscreen')) {
+      this.controller.lockKeyboard(); // no-op unless we happen to be fullscreen
+      return;
+    }
+    const el = document.documentElement;
+    if (document.fullscreenElement || !el.requestFullscreen) {
+      this.controller.lockKeyboard();
+      return;
+    }
+    const after = () => this.controller.lockKeyboard();
+    try {
+      Promise.resolve(el.requestFullscreen({ navigationUI: 'hide' })).then(after, after);
+    } catch {
+      after();
+    }
+  }
+
+  exitImmersive() {
+    this.controller.unlockKeyboard();
+    if (!document.fullscreenElement || !document.exitFullscreen) return;
+    try {
+      Promise.resolve(document.exitFullscreen()).catch(() => {});
+    } catch {
+      /* nothing to do — the browser is already out of fullscreen */
+    }
   }
 
   requestLock() {
@@ -472,6 +537,7 @@ export class Game {
     this.state.set(GameState.RESULTS);
     this.controller.setEnabled(false);
     this.controller.releaseLock();
+    this.controller.unlockKeyboard();
     this.ui.death.hide();
     this.ui.resume.hide();
     this.hud.hide();
@@ -628,6 +694,8 @@ export class Game {
 
   dispose() {
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('beforeunload', this._onBeforeUnload);
+    document.removeEventListener('fullscreenchange', this._onFullscreenChange);
     this.canvas.removeEventListener('webglcontextlost', this._onContextLost);
     this.canvas.removeEventListener('webglcontextrestored', this._onContextRestored);
     this.controller.dispose();

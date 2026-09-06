@@ -82,6 +82,7 @@ export class SettingsPanel {
     this.invert = document.getElementById('set-invert');
     this.shake = document.getElementById('set-shake');
     this.adsToggle = document.getElementById('set-adstoggle');
+    this.fullscreen = document.getElementById('set-fullscreen');
     this.fpsReadout = document.getElementById('fps-readout');
 
     this.syncFromSettings();
@@ -111,6 +112,7 @@ export class SettingsPanel {
     this.invert.addEventListener('change', () => this.settings.set('invertY', this.invert.checked));
     this.shake.addEventListener('change', () => this.settings.set('cameraShake', this.shake.checked));
     this.adsToggle.addEventListener('change', () => this.settings.set('adsToggle', this.adsToggle.checked));
+    this.fullscreen.addEventListener('change', () => this.settings.set('fullscreen', this.fullscreen.checked));
 
     wireButtons(this.el, (action) => {
       if (action === 'back') this.hide();
@@ -132,6 +134,7 @@ export class SettingsPanel {
     this.invert.checked = !!s.invertY;
     this.shake.checked = !!s.cameraShake;
     this.adsToggle.checked = !!s.adsToggle;
+    this.fullscreen.checked = !!s.fullscreen;
     this._paintQuality();
   }
 
